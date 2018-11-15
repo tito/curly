@@ -13,7 +13,7 @@ Features:
 - Basic caching support (no GIL)
 - Preload image (GIL required for now)
 
-.. todo::
+Todo:
 
   - make it work under msvc (http://forum.blackvoxel.com/index.php?topic=84.0)
   - unittests
@@ -37,18 +37,18 @@ There is no release yet, so you must install it by sources.
 
 You have 2 ways to execute a download:
 
-- use :func:`request` to download a resource at a specific URL
-- use :func:`download_image` to download a resource and preload the
+- use `request()` to download a resource at a specific URL
+- use `download_image()` to download a resource and preload the
   image, if the request succedded and the image format is known
 
 The download will be done in background, and the threads will emit a
 result in a queue. You need to process as much as possible the queue
 to have your callback called within your application:
 
-- use :func:`install` to install a Kivy clock scheduler that will
-  process the result every tick (you can :func:`uninstall` it at
+- use `install()` to install a Kivy clock scheduler that will
+  process the result every tick (you can `uninstall()` it at
   any times)
-- or call yourself :func:`process` when you need too.
+- or call yourself `process()` when you need too.
 
 
 ## Request an URL and get the data
