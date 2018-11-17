@@ -3,7 +3,6 @@ ctypedef struct dl_queue_data:
     int curl_ret
 
     # http request
-    int status_code
     char *url
     char *data
     int size

@@ -293,6 +293,7 @@ cdef class CurlyResult(object):
         object _json
         object _image
         bytes _reason
+        object _http_status_code
 
     def __cinit__(self):
         self._data = NULL
@@ -346,7 +347,8 @@ cdef class CurlyResult(object):
     def status_code(self):
         """HTTP Status Code
         """
-        return self._data.status_code
+        self._parse_headers()
+        return self._http_status_code
 
     @property
     def curl_ret(self):
@@ -390,7 +392,9 @@ cdef class CurlyResult(object):
         while item != NULL:
             b_data = item.data[:strlen(item.data)].strip()
             if b_data.startswith(b"HTTP/"):
-                self._reason = b_data.split(b" ", 3)[-1]
+                items = b_data.split(b" ", 3)
+                self._http_status_code = int(items[1])
+                self._reason = items[-1]
             elif b_data:
                 key, value = b_data.split(b":", 1)
                 key = key.strip().lower()
@@ -497,9 +501,6 @@ def request(url, callback, headers=None,
 
     # allocate qdata
     qdata = <dl_queue_data *>calloc(1, sizeof(dl_queue_data))
-    qdata.status_code = -1
-    qdata.data = NULL
-    qdata.callback = NULL
     qdata.preload_image = int(preload_image)
 
     # url + params
