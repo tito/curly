@@ -284,7 +284,7 @@ class CurlyHTTPError(CurlyError):
     """
 
 
-cdef class CurlResult(object):
+cdef class CurlyResult(object):
     """Object containing a result from a request.
     """
     cdef:
@@ -442,7 +442,7 @@ cdef class CurlResult(object):
         return self._json
 
     def __repr__(self):
-        return "<CurlResult url={!r}>".format(self.url)
+        return "<CurlyResult url={!r}>".format(self.url)
 
 
 def request(url, callback, headers=None,
@@ -455,7 +455,7 @@ def request(url, callback, headers=None,
         `url`: str
             URL to fetch
         `callback`: callable with one argument
-            The callback function will receive the :class:`CurlResult` when
+            The callback function will receive the :class:`CurlyResult` when
             the request is done.
         `headers`: dict
             Dictionnary of all HTTP headers to pass in the request.
@@ -594,7 +594,7 @@ def process(*args):
     Clock.
     """
     cdef:
-        CurlResult result
+        CurlyResult result
         dl_queue_data *data
         bytes b_data = None
         object callback
@@ -609,7 +609,7 @@ def process(*args):
         if not callback:
             continue
 
-        result = CurlResult()
+        result = CurlyResult()
         result._data = data
         callback(result)
 
