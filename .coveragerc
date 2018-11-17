@@ -1,0 +1,6 @@
+[run]
+source = curly
+plugins = Cython.Coverage
+
+[report]
+omit = */tests/*

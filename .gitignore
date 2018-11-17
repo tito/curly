@@ -5,3 +5,5 @@
 build
 examples/cache
 __pycache__
+.coverage
+*.egg-info

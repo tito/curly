@@ -5,9 +5,12 @@ from os import environ, getenv
 from os.path import join, isdir
 try:
     from setuptools import setup, Extension
+    from setuptools.command.test import test as TestCommand
+    with_test = True
 except ImportError:
     from distutils.core import setup
     from distutils.extension import Extension
+    with_test = False
 
 
 def pkgconfig(*packages, **kw):
@@ -98,9 +101,10 @@ if kivy_ios_root is not None:
     platform = 'ios'
 
 # check cython
-print("PLATFORM IS", platform)
+with_coverage = False
 if platform in ('ios', 'android'):
     print('Cython check avoided.')
+    with_cython = False
     try:
         from setuptools.command.build_ext import build_ext
     except ImportError:
@@ -109,9 +113,24 @@ if platform in ('ios', 'android'):
 else:
     try:
         from Cython.Distutils import build_ext
+        from Cython.Build import cythonize
+        with_cython = True
+        with_coverage = environ.get("WITH_COVERAGE")
     except ImportError:
         print("\nCython is missing, it's required for compiling curly !\n\n")
         raise
+
+cython_directives = {}
+define_macros = []
+if with_coverage:
+    cython_directives["binding"] = True
+    cython_directives["embedsignature"] = True
+    cython_directives["profile"] = True
+    cython_directives["linetrace"] = True
+    define_macros = [
+        ("CYTHON_PROFILE", 1),
+        ("CYTHON_TRACE", 1),
+        ("CYTHON_TRACE_NOGIL", 1)]
 
 # find libraries
 if platform == "android":
@@ -126,19 +145,42 @@ else:
     INCLUDE_DIRS.extend(flags["include_dirs"])
     LIBRARIES.extend(flags["libraries"])
 
+# create the extensions
+extensions = [
+    Extension(
+        "_curly", FILES,
+        libraries=LIBRARIES,
+        library_dirs=LIBRARY_DIRS,
+        include_dirs=INCLUDE_DIRS,
+        extra_link_args=EXTRA_LINK_ARGS,
+        define_macros=define_macros
+    )
+]
+if with_cython:
+    extensions = cythonize(
+        extensions, compiler_directives=cython_directives)
+
+cmdclass = {'build_ext': build_ext}
+if with_test:
+
+    class PyTest(TestCommand):
+        description = "Run test suite with pytest"
+
+        def finalize_options(self):
+            TestCommand.finalize_options(self)
+            self.test_args = []
+            self.test_suite = True
+
+        def run_tests(self):
+            import pytest
+            sys.exit(pytest.main(self.test_args))
+
+    cmdclass["test"] = PyTest
 
 # create the extension
 setup(
-    cmdclass={'build_ext': build_ext},
+    cmdclass=cmdclass,
     install_requires=INSTALL_REQUIRES,
-    ext_modules=[
-        Extension(
-            "_curly", FILES,
-            libraries=LIBRARIES,
-            library_dirs=LIBRARY_DIRS,
-            include_dirs=INCLUDE_DIRS,
-            extra_link_args=EXTRA_LINK_ARGS
-        )
-    ],
+    ext_modules=extensions,
     **SETUP_KWARGS
 )

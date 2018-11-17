@@ -7,3 +7,11 @@ build_ext:
 
 clean:
 		rm -rf curly/*.so curly/_curly.c
+
+tests:
+		pytest -v
+
+coverage: clean
+		WITH_COVERAGE=1 python setup.py build_ext --inplace -f
+		coverage run --source curly setup.py test
+		coverage report -m
