@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import time
-import kivy.network.curl as curl
+import curly as curl
 
 counter = 0
 
@@ -24,4 +24,3 @@ while True:
     if counter == 2:
         break
     time.sleep(1)
-

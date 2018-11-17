@@ -1,5 +1,4 @@
 cdef extern from * nogil:
-    bool __sync_bool_compare_and_swap(void **ptr, void *oldval, void *newval)
     ctypedef unsigned int size_t
 
 
@@ -13,22 +12,69 @@ cdef extern from "curl/curl.h" nogil:
         CURLOPT_HTTPHEADER
         CURLOPT_HEADERFUNCTION
         CURLOPT_HEADERDATA
+        CURLOPT_CUSTOMREQUEST
+        CURLOPT_HTTPPOST
+        CURLOPT_HTTPGET
+        CURLOPT_POSTFIELDS
+        CURLOPT_HTTPAUTH
+        CURLOPT_USERPWD
+        CURLOPT_POSTFIELDSIZE
+        CURLOPT_SSL_VERIFYPEER
+        CURLAUTH_ANY
+
+    enum CURLversion:
+        CURLVERSION_NOW
 
     enum CURLSHcode:
         CURLSHE_OK
+
     struct CURL:
         pass
     struct curl_slist:
         curl_slist *next
         char *data
 
-    int CURLcode
+    ctypedef struct curl_version_info_data:
+        CURLversion age  # see description below
+
+        # when 'age' is 0 or higher, the members below also exist:
+        const char *version  # human readable string
+        unsigned int version_num  # numeric representation
+        const char *host  # human readable string
+        int features  # bitmask, see below
+        char *ssl_version  # human readable string
+        long ssl_version_num  # not used, always zero
+        const char *libz_version  # human readable string
+        const char * const *protocols  # protocols
+
+        # when 'age' is 1 or higher, the members below also exist:
+        const char *ares  # human readable string
+        int ares_num  # number
+
+        # when 'age' is 2 or higher, the member below also exists:
+        const char *libidn  # human readable string
+
+        # when 'age' is 3 or higher (7.16.1 or later), the members below also exist
+        int iconv_ver_num  # '_libiconv_version' if iconv support enabled
+
+        const char *libssh_version  # human readable string
+
+        # when 'age' is 4 or higher (7.57.0 or later), the members below also exist
+        unsigned int brotli_ver_num  # Numeric Brotli vers (MAJOR << 24) | (MINOR << 12) | PATCH
+        const char *brotli_version  # human readable string.
+
+
+    ctypedef int CURLcode
+    int CURL_GLOBAL_ALL
+    CURLcode curl_global_init(long flags)
     CURL *curl_easy_init()
     CURLSHcode curl_easy_setopt(CURL *, CURLoption, ...)
     CURLSHcode curl_easy_cleanup(CURL *)
     CURLSHcode curl_easy_perform(CURL *)
     curl_slist *curl_slist_append(curl_slist *, char *)
     void curl_slist_free_all(curl_slist *)
+    curl_version_info_data *curl_version_info(CURLversion age)
+    const char *curl_easy_strerror(int)
 
 cdef extern from "SDL.h" nogil:
     ctypedef unsigned char Uint8
@@ -49,9 +95,10 @@ cdef extern from "SDL.h" nogil:
     ctypedef struct SDL_Thread
     ctypedef struct SDL_mutex
     ctypedef int SDL_atomic_t
+    ctypedef int SDL_bool
     ctypedef struct SDL_sem
     cdef struct SDL_BlitMap
-    
+
     cdef struct SDL_Color:
         Uint8 r
         Uint8 g
@@ -115,6 +162,9 @@ cdef extern from "SDL.h" nogil:
     SDL_threadID SDL_GetThreadID(SDL_Thread *thread)
     void SDL_WaitThread(SDL_Thread *thread, int *status)
 
+    SDL_bool SDL_AtomicCASPtr(void** a,
+                              void*  oldval,
+                              void*  newval)
     int SDL_AtomicGet(SDL_atomic_t *)
     int SDL_AtomicSet(SDL_atomic_t *, int v)
     int SDL_SemWait(SDL_sem *)

@@ -98,10 +98,14 @@ if kivy_ios_root is not None:
     platform = 'ios'
 
 # check cython
-skip_cython = False
+print("PLATFORM IS", platform)
 if platform in ('ios', 'android'):
-    print('\nCython check avoided.')
-    skip_cython = True
+    print('Cython check avoided.')
+    try:
+        from setuptools.command.build_ext import build_ext
+    except ImportError:
+        from distutils.command.build_ext import build_ext
+    FILES = ["curly/_curly.c"]
 else:
     try:
         from Cython.Distutils import build_ext
@@ -112,7 +116,8 @@ else:
 # find libraries
 if platform == "android":
     # XXX untested yet
-    LIBRARIES = ["sdl", "curl", "sdl_image"]
+    INCLUDE_DIRS = getenv("INCLUDE_DIRS").split(":")
+    LIBRARIES = ["SDL2", "curl", "SDL2_image"]
     LIBRARY_DIRS = ["libs/" + getenv("ARCH")]
 elif platform == "ios":
     raise Exception("TODO")

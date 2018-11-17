@@ -6,4 +6,4 @@ build_ext:
 		python setup.py build_ext --inplace
 
 clean:
-		rm curly/*.so
+		rm -rf curly/*.so curly/_curly.c

@@ -1,10 +1,16 @@
 ctypedef struct dl_queue_data:
+    # curl perform
+    int curl_ret
+
     # http request
     int status_code
     char *url
     char *data
     int size
     void *callback
+    char *postdata
+    char *method
+    char *auth_userpwd
     curl_slist *headers
     curl_slist *resp_headers
 
@@ -55,7 +61,7 @@ cdef int queue_append_last(queue_ctx *ctx, void *data) nogil:
     node.data = data
     while True:
         p = ctx.tail
-        if __sync_bool_compare_and_swap(<void **>&ctx.tail, p, node):
+        if SDL_AtomicCASPtr(<void **>&ctx.tail, p, node):
             p.next = node
             break
 
@@ -68,8 +74,8 @@ cdef void *queue_pop_first(queue_ctx *ctx) nogil:
     while True:
         p = ctx.head
         if p == NULL:
-            continue
-        if not __sync_bool_compare_and_swap(<void **>&ctx.head, p, NULL):
+            return NULL
+        if not SDL_AtomicCASPtr(<void **>&ctx.head, p, NULL):
             continue
         break
     if p.next == NULL:
@@ -84,7 +90,12 @@ cdef void *queue_pop_first(queue_ctx *ctx) nogil:
 cdef void dl_queue_node_free(dl_queue_data **data):
     if data is NULL:
         return
-    free(data[0].url)
+    if data[0] is NULL:
+        return
+    if data[0].url != NULL:
+        free(data[0].url)
+    if data[0].method != NULL:
+        free(data[0].method)
     if data[0].cache_fn != NULL:
         free(data[0].cache_fn)
     if data[0].data != NULL:
@@ -95,4 +106,8 @@ cdef void dl_queue_node_free(dl_queue_data **data):
         curl_slist_free_all(data[0].resp_headers)
     if data[0].callback != NULL:
         Py_XDECREF(<PyObject *>data[0].callback)
+    if data[0].auth_userpwd != NULL:
+        free(data[0].auth_userpwd)
+    if data[0].postdata != NULL:
+        free(data[0].postdata)
     free(data[0])

@@ -1,18 +1,27 @@
 # -*- coding: utf-8 -*-
 
 # Cython import
+try:
+    import _ssl
+except ImportError:
+    print("curly requires ssl linked, otherwise libcurl won't work")
+
 from libc.stdio cimport printf, FILE, fopen, fwrite, fclose
 from libc.stdlib cimport malloc, calloc, free, realloc
-from libc.string cimport memset, strdup, memcpy, strlen
+from libc.string cimport memset, strdup, memcpy, strlen, strncmp
+from json import dumps, loads
 from cpython.ref cimport PyObject, Py_XINCREF, Py_XDECREF
 from posix.unistd cimport access, F_OK
 from libcpp cimport bool
+try:
+    from urllib.parse import quote
+except ImportError:
+    from urllib import quote
 
 # Python import
 from kivy.core.image import Image as CoreImage
 from kivy.core.image import ImageLoaderBase, ImageData
 from kivy.clock import Clock
-import json
 
 include "_include.pxi"
 include "_queue.pxi"
@@ -26,8 +35,12 @@ cdef int dl_stop = 0
 cdef SDL_sem *dl_sem
 cdef SDL_atomic_t dl_done
 
+cdef int config_num_threads = 4
+# very bad, will activate by default once we can check cacert.pem on android
+cdef int config_req_verify_peer = 0
 
-cdef size_t _curl_write_data(void *ptr, size_t size, size_t nmemb, dl_queue_data *data):
+
+cdef size_t _curl_write_data(void *ptr, size_t size, size_t nmemb, dl_queue_data *data) nogil:
     cdef:
         size_t index = data.size
         size_t n = (size * nmemb)
@@ -47,7 +60,7 @@ cdef size_t _curl_write_data(void *ptr, size_t size, size_t nmemb, dl_queue_data
     return size * nmemb
 
 
-cdef size_t _curl_write_header(void *ptr, size_t size, size_t nmemb, dl_queue_data *data):
+cdef size_t _curl_write_header(void *ptr, size_t size, size_t nmemb, dl_queue_data *data) nogil:
     cdef char *tmp
 
     tmp = <char *>malloc(size * nmemb + 1)
@@ -96,9 +109,29 @@ cdef int dl_run_job(void *arg) nogil:
             # curl_easy_setopt(curl, CURLOPT_VERBOSE, <void *><long>1L)
             if data.headers != NULL:
                 curl_easy_setopt(curl, CURLOPT_HTTPHEADER, data.headers)
-            data.status_code = curl_easy_perform(curl)
+            else:
+                curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL)
+            if data.auth_userpwd != NULL:
+                curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY)
+                curl_easy_setopt(curl, CURLOPT_USERPWD, data.auth_userpwd)
+            if data.postdata != NULL:
+                curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.postdata)
+                curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, strlen(data.postdata))
+            if strncmp(data.method, "GET", 3) == 0:
+                curl_easy_setopt(curl, CURLOPT_HTTPGET, 1)
+            elif strncmp(data.method, "POST", 4) == 0:
+                curl_easy_setopt(curl, CURLOPT_HTTPPOST, 1)
+            else:
+                curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, data.method)
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, <void *><long>config_req_verify_peer)
+            data.curl_ret = curl_easy_perform(curl)
 
-            if data.cache_fn != NULL and data.size > 0:
+            if data.curl_ret != 0:
+                # if the request failed for any reason,
+                # avoid any sort of image preloading
+                data.preload_image = 0
+
+            elif data.cache_fn != NULL and data.size > 0:
                 fp = fopen(data.cache_fn, "wb")
                 fwrite(data.data, data.size, 1, fp)
                 fclose(fp)
@@ -135,6 +168,8 @@ cdef void dl_init(int num_threads) nogil:
     SDL_AtomicSet(&dl_done, 0)
     dl_sem = SDL_CreateSemaphore(0)
 
+    curl_global_init(CURL_GLOBAL_ALL)
+
     for index in range(num_threads):
         thread = SDL_CreateThread(dl_run_job, "curl", NULL)
         queue_append_last(&ctx_thread, thread)
@@ -146,7 +181,23 @@ cdef void dl_ensure_init() nogil:
     # ensure the download threads are ready
     if dl_running:
         return
-    dl_init(4)
+    dl_init(config_num_threads)
+
+
+def get_info():
+    cdef curl_version_info_data *info
+    dl_ensure_init()
+    info = curl_version_info(CURLVERSION_NOW)
+    ret = {}
+    if info.version != NULL:
+        ret["version"] = info.version.decode("utf8")
+    if info.host != NULL:
+        ret["host"] = (<char *>info.host).decode("utf8")
+    if info.ssl_version != NULL:
+        ret["ssl_version"] = (<char *>info.ssl_version).decode("utf8")
+    if info.libz_version != NULL:
+        ret["libz_version"] = (<char *>info.libz_version).decode("utf8")
+    return ret
 
 
 cdef load_from_surface(SDL_Surface *image):
@@ -220,11 +271,17 @@ class ImageLoaderMemory(ImageLoaderBase):
 # API
 #
 
-class HTTPError(Exception):
-    """HTTP Error that can be sent when :method:`CurlResult.raise_for_status`
-    is raising an exception
+class CurlyError(Exception):
+    """Exception raised when something was wrong during the request, when
+    checking the result with `raise_for_status`.
+    Check the `code` attribute to get the libcurl error code.
     """
-    pass
+
+
+class CurlyHTTPError(CurlyError):
+    """If the request was ok, this exception is raised if the HTTP status
+    code was indicating an issue with the HTTP requests.
+    """
 
 
 cdef class CurlResult(object):
@@ -292,6 +349,15 @@ cdef class CurlResult(object):
         return self._data.status_code
 
     @property
+    def curl_ret(self):
+        """Libcurl status after performing the request.
+        0 is OK, everything else is an error.
+
+        Check https://curl.haxx.se/libcurl/c/libcurl-errors.html
+        """
+        return self.curl_ret
+
+    @property
     def headers(self):
         """HTTP Response headers
         """
@@ -334,9 +400,24 @@ cdef class CurlResult(object):
             item = item.next
 
     def raise_for_status(self):
-        """If the HTTP status code was wrong (within 400-599),
-        it will raise an :class:`HTTPError` exception
+        """If the request failed for any reason, it will raise an
+        :class:`CurlyError` with the libcurl error code.
+        If the request was ok, then it will check if the HTTP status code was
+        wrong (within 400-599), in that case it will raise an
+        it will raise an :class:`CurlyHTTPError` exception.
         """
+
+        cdef const char *c_msg
+        if self.curl_ret != 0:
+            c_msg = curl_easy_strerror(self.curl_ret)
+            if c_msg == NULL:
+                msg = "No error message for {}".format(self.curl_ret)
+            else:
+                msg = c_msg.decode("utf8")
+            exc = CurlyError(msg)
+            exc.code = self.curl_ret
+            raise exc
+
         reason = None
         http_error_msg = None
         if 400 <= self.status_code < 500:
@@ -346,7 +427,7 @@ cdef class CurlResult(object):
             http_error_msg = u'{} Server Error: {} for url: {}'.format(
                 self.status_code, reason, self.url)
         if http_error_msg:
-            exc = HTTPError(http_error_msg)
+            exc = CurlyHTTPError(http_error_msg)
             exc.response = self
             raise exc
 
@@ -357,14 +438,16 @@ cdef class CurlResult(object):
         if not self.headers.get("content-type", "").startswith("application/json"):
             raise Exception("Not a application/json response")
         if self._json is None:
-            self._json = json.loads(self.data)
+            self._json = loads(self.data)
         return self._json
 
     def __repr__(self):
         return "<CurlResult url={!r}>".format(self.url)
 
 
-def request(url, callback, headers=None, cache_fn=None, preload_image=False):
+def request(url, callback, headers=None,
+            method="GET", params=None, data=None, json=None,
+            auth=None, cache_fn=None, preload_image=False):
     """Execute an HTTP Request asynchronously.
     The result will be dispatched only when :func:`process` is called
 
@@ -377,6 +460,20 @@ def request(url, callback, headers=None, cache_fn=None, preload_image=False):
         `headers`: dict
             Dictionnary of all HTTP headers to pass in the request.
             Defaults to None.
+        `method`: str
+            Method of the http request, defaults to "GET".
+        `params`: dict
+            Dictionnary of additionnal parameters to add in the URL.
+            Defaults to None.
+        `data`: dict, bytes or unicode
+            Data to send in the body if the requests.
+            If dict, it will be transformed to a bytes string.
+            No multipart/form-data are supported yet.
+        `json`: dict
+            Data to send in the body of the requests.
+            Automatically convert to a bytes string, and set the content type.
+        `auth`: tuple
+            Authentication support, only (user, password) supported right now.
         `preload_image`: bool
             If an image is passed in URL, it will be downloaded
             then preloaded via SDL2 to reduce the load on the main thread
@@ -391,35 +488,94 @@ def request(url, callback, headers=None, cache_fn=None, preload_image=False):
             from the url.
     """
     cdef:
-        dl_queue_data *data = <dl_queue_data *>calloc(1, sizeof(dl_queue_data))
-        bytes b_url = url.encode("utf8")
-        bytes b_cache_fn
-        char *c_url = b_url
+        dl_queue_data *qdata
+        bytes b_string
         char *c_header
-        char *c_cache_fn
-    data.status_code = -1
-    data.data = NULL
-    data.callback = NULL
-    data.preload_image = int(preload_image)
-    data.url = strdup(c_url)
 
+    if data and json:
+        raise Exception("Cannot have data and json parameters at the same time")
+
+    # allocate qdata
+    qdata = <dl_queue_data *>calloc(1, sizeof(dl_queue_data))
+    qdata.status_code = -1
+    qdata.data = NULL
+    qdata.callback = NULL
+    qdata.preload_image = int(preload_image)
+
+    # url + params
+    if params:
+        url_suffix = []
+        for key, value in params.items():
+            value = "{}".format(value)
+            url_suffix.append("{}={}".format(quote(key), quote(value)))
+        if "?" in url:
+            url += "&" + "&".join(url_suffix)
+        else:
+            url += "?" + "&".join(url_suffix)
+
+    b_string = url.encode("utf8")
+    qdata.url = strdup(b_string)
+
+    # method
+    b_string = method.encode("utf8")
+    qdata.method = strdup(b_string)
+
+    # postdata
+    if json is not None:
+        data = dumps(json)
+        b_string = data.encode("utf8")
+        qdata.postdata = strdup(b_string)
+        headers["Content-Type"] = "application/json"
+    elif isinstance(data, dict):
+        # XXX support multipart form-data, using curl_mime
+        postdata = []
+        for key, value in data.items():
+            value = "{}".format(value)
+            postdata.append("{}={}".format(quote(key), quote(value)))
+        postdata = "&".join(postdata)
+        b_string = postdata.encode("utf8")
+        qdata.postdata = strdup(b_string)
+
+    if data is not None:
+        if isinstance(data, bytes):
+            b_string = data
+        else:
+            b_string = data.encode("utf8")
+        qdata.postdata = strdup(b_string)
+
+    # cache
     if cache_fn is not None:
-        b_cache_fn = cache_fn.encode("utf8")
-        c_cache_fn = b_cache_fn
-        data.cache_fn = strdup(c_cache_fn)
+        b_string = cache_fn.encode("utf8")
+        qdata.cache_fn = strdup(b_string)
+
+    # headers
     if headers is not None:
         for key, value in headers.iteritems():
-            header = "{}: {}".format(key, value)
+            header = "{}: {}".format(key, value).encode("utf8")
             c_header = header
-            data.headers = curl_slist_append(
-                data.headers, c_header)
+            qdata.headers = curl_slist_append(
+                qdata.headers, c_header)
 
-    if callback:
-        data.callback = <void *>callback
-        Py_XINCREF(<PyObject *>data.callback)
+    # callback
+    if callback is not None:
+        qdata.callback = <void *>callback
+        Py_XINCREF(<PyObject *>qdata.callback)
+
+    # auth
+    if isinstance(auth, (tuple, list)):
+        # supports HTTP AUTH
+        obj = "{}:{}".format(*auth)
+        b_string = obj.encode("utf8")
+        qdata.auth_userpwd = strdup(b_string)
+    elif auth is None:
+        pass
+    else:
+        dl_queue_node_free(&qdata)
+        raise Exception("Unsupported auth for the moment")
+
 
     dl_ensure_init()
-    queue_append_last(&ctx_download, data)
+    queue_append_last(&ctx_download, qdata)
     SDL_SemPost(dl_sem)
 
 
@@ -479,3 +635,25 @@ def stop():
     SDL_AtomicSet(&dl_done, 1)
     SDL_SemPost(dl_sem)
     SDL_DestroySemaphore(dl_sem)
+
+
+def configure(num_threads=4, req_verify_peer=0):
+    """Configure the library before any invocation
+    Any call after the using `request`, `download_image` or `get_info`
+    won't use the information and raise an exception.
+
+    :Parameters:
+        `num_threads`: int
+            Number of background threads to use for downloading
+            Defaults to 4
+        `req_verify_peer`: bool
+            If True, it will verify SSL peers.
+            But since we have an issue with cacert.pem on Android, it is
+            disabled by default right now. (it's bad)
+            Defaults to False
+    """
+    if dl_running:
+        raise Exception("Library already running, cannot reconfigure.")
+    global config_num_threads, config_req_verify_peer
+    config_num_threads = num_threads
+    config_req_verify_peer = 1 if req_verify_peer else 0
