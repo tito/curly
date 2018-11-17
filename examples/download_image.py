@@ -23,4 +23,4 @@ while True:
     curl.process()
     if counter == 2:
         break
-    time.sleep(1)
+    time.sleep(.1)

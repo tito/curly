@@ -355,7 +355,7 @@ cdef class CurlyResult(object):
 
         Check https://curl.haxx.se/libcurl/c/libcurl-errors.html
         """
-        return self.curl_ret
+        return self._data.curl_ret
 
     @property
     def headers(self):
