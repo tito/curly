@@ -167,10 +167,19 @@ cdef extern from "SDL.h" nogil:
                               void*  newval)
     int SDL_AtomicGet(SDL_atomic_t *)
     int SDL_AtomicSet(SDL_atomic_t *, int v)
+    void SDL_AtomicIncRef(SDL_atomic_t* a)
+    SDL_bool SDL_AtomicDecRef(SDL_atomic_t* a)
     int SDL_SemWait(SDL_sem *)
     int SDL_SemPost(SDL_sem *)
     SDL_sem *SDL_CreateSemaphore(int)
     void SDL_DestroySemaphore(SDL_sem *)
+
+    SDL_mutex* SDL_CreateMutex()
+    void SDL_DestroyMutex(SDL_mutex* mutex)
+    int SDL_LockMutex(SDL_mutex* mutex)
+    int SDL_TryLockMutex(SDL_mutex* mutex)
+    int SDL_UnlockMutex(SDL_mutex* mutex)
+
 
     cdef SDL_RWops * SDL_RWFromFile(char *file, char *mode)
     cdef SDL_RWops * SDL_RWFromMem(void *mem, int size)

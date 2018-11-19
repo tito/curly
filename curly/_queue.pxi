@@ -30,25 +30,29 @@ ctypedef struct queue_node:
 ctypedef struct queue_ctx:
     queue_node *head
     queue_node *tail
+    SDL_mutex *mutex
 
 
 cdef void queue_init(queue_ctx *ctx) nogil:
-    cdef queue_node *node = <queue_node *>calloc(1, sizeof(queue_node))
     memset(ctx, 0, sizeof(queue_ctx))
-    ctx.head = ctx.tail = node
+    ctx.mutex = SDL_CreateMutex()
+    ctx.head = ctx.tail = NULL
 
 
-cdef void queue_clean(queue_ctx *ctx) nogil:
-    cdef queue_node *node
-    cdef queue_node *tmp
-    if ctx.tail != NULL or ctx.head != NULL:
-        node = ctx.head
-        while node != ctx.tail:
-            tmp = node.next
-            free(node)
-            node = tmp
-        free(ctx.head)
-        memset(ctx, 0, sizeof(queue_ctx))
+# FIXME: not used right now, but we should clean the memory
+# correctly at the end
+# cdef void queue_clean(queue_ctx *ctx) nogil:
+#     cdef queue_node *node
+#     cdef queue_node *tmp
+#     if ctx.tail != NULL or ctx.head != NULL:
+#         node = ctx.head
+#         while node != ctx.tail:
+#             tmp = node.next
+#             free(node)
+#             node = tmp
+#         free(ctx.head)
+#     SDL_DestroyMutex(ctx.mutex)
+#     memset(ctx, 0, sizeof(queue_ctx))
 
 
 cdef int queue_append_last(queue_ctx *ctx, void *data) nogil:
@@ -58,30 +62,61 @@ cdef int queue_append_last(queue_ctx *ctx, void *data) nogil:
         return -1
 
     node.data = data
-    while True:
-        p = ctx.tail
-        if SDL_AtomicCASPtr(<void **>&ctx.tail, p, node):
-            p.next = node
-            break
+    if SDL_LockMutex(ctx.mutex) != 0:
+        return -1
 
+    if ctx.tail != NULL:
+        ctx.tail.next = node
+        ctx.tail = node
+    else:
+        ctx.head = ctx.tail = node
+
+    SDL_UnlockMutex(ctx.mutex)
+    return 0
+
+
+cdef int queue_append_first(queue_ctx *ctx, void *data) nogil:
+    cdef queue_node *p
+    cdef queue_node *node = <queue_node *>calloc(1, sizeof(queue_node))
+    if node == NULL:
+        return -1
+
+    node.data = data
+    if SDL_LockMutex(ctx.mutex) != 0:
+        return -1
+
+    if ctx.head != NULL:
+        node.next = ctx.head
+        ctx.head = node
+    else:
+        ctx.head = ctx.tail = node
+
+    SDL_UnlockMutex(ctx.mutex)
     return 0
 
 
 cdef void *queue_pop_first(queue_ctx *ctx) nogil:
     cdef void *ret = NULL
-    cdef queue_node *p
-    while True:
-        p = ctx.head
-        if p == NULL:
-            return NULL
-        if not SDL_AtomicCASPtr(<void **>&ctx.head, p, NULL):
-            continue
-        break
-    if p.next == NULL:
-        ctx.head = p
+    cdef queue_node *p = NULL
+
+    if SDL_LockMutex(ctx.mutex) != 0:
         return NULL
-    ret = p.next.data
-    ctx.head = p.next
+
+    if ctx.head == NULL:
+        SDL_UnlockMutex(ctx.mutex)
+        return NULL
+
+    if ctx.head != NULL:
+        p = ctx.head
+        ctx.head = ctx.head.next
+    if ctx.head == NULL:
+        ctx.tail = NULL
+    SDL_UnlockMutex(ctx.mutex)
+
+    if p == NULL:
+        return NULL
+
+    ret = p.data
     free(p)
     return ret
 

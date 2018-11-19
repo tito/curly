@@ -34,6 +34,7 @@ cdef int dl_running = 0
 cdef int dl_stop = 0
 cdef SDL_sem *dl_sem
 cdef SDL_atomic_t dl_done
+cdef SDL_atomic_t dl_ready_to_process
 
 cdef int config_num_threads = 4
 # very bad, will activate by default once we can check cacert.pem on android
@@ -152,6 +153,7 @@ cdef int dl_run_job(void *arg) nogil:
                 data.data = NULL
 
         queue_append_last(&ctx_result, data)
+        SDL_AtomicIncRef(&dl_ready_to_process)
 
     curl_easy_cleanup(curl)
     return 0
@@ -422,6 +424,10 @@ cdef class CurlyResult(object):
             exc.code = self.curl_ret
             raise exc
 
+        if self.status_code is None:
+            # no status code, so it's a cached loading
+            return
+
         reason = None
         http_error_msg = None
         if 400 <= self.status_code < 500:
@@ -451,7 +457,8 @@ cdef class CurlyResult(object):
 
 def request(url, callback, headers=None,
             method="GET", params=None, data=None, json=None,
-            auth=None, cache_fn=None, preload_image=False):
+            auth=None, cache_fn=None, preload_image=False,
+            priority=False):
     """Execute an HTTP Request asynchronously.
     The result will be dispatched only when :func:`process` is called
 
@@ -490,6 +497,10 @@ def request(url, callback, headers=None,
             If a later request indicate the same cache_fn, and the cache
             exists, it will be used instead of downloading the data
             from the url.
+        `priority`: bool
+            If True, the URL will be fetch before the other, aka, it will be
+            the next to be deque.
+            Defaults to False.
     """
     cdef:
         dl_queue_data *qdata
@@ -576,7 +587,10 @@ def request(url, callback, headers=None,
 
 
     dl_ensure_init()
-    queue_append_last(&ctx_download, qdata)
+    if priority:
+        queue_append_first(&ctx_download, qdata)
+    else:
+        queue_append_last(&ctx_download, qdata)
     SDL_SemPost(dl_sem)
 
 
@@ -601,7 +615,7 @@ def process(*args):
         object callback
         curl_slist *item
 
-    while True:
+    while SDL_AtomicDecRef(&dl_ready_to_process) == 0:
         data = <dl_queue_data *>queue_pop_first(&ctx_result)
         if data == NULL:
             break
@@ -619,7 +633,7 @@ def install():
     """Install a scheduler in the Kivy clock to call :func:`process`
     """
     uninstall()
-    Clock.schedule_interval(process, 0)
+    Clock.schedule_interval(process, 1 / 120.)
 
 
 def uninstall():
