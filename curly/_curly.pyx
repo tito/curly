@@ -326,6 +326,8 @@ cdef class CurlyResult(object):
         # here, but rather in the thread, if anything has to be done.
         # So using the load_from_surface will disapear somehow to have
         # a fully C version that doesn't require python.
+        if self._data.image == NULL:
+            return
         image = load_from_surface(self._data.image)
         loader = ImageLoaderMemory(self._data.url.decode("utf8"), image)
         self._image = CoreImage(loader)
