@@ -22,6 +22,8 @@ except ImportError:
 from kivy.core.image import Image as CoreImage
 from kivy.core.image import ImageLoaderBase, ImageData
 from kivy.clock import Clock
+from os.path import dirname, exists
+from os import makedirs
 
 include "_include.pxi"
 include "_queue.pxi"
@@ -559,6 +561,9 @@ def request(url, callback, headers=None,
 
     # cache
     if cache_fn is not None:
+        cache_dir = dirname(cache_fn)
+        if not exists(cache_dir):
+            makedirs(cache_dir)
         b_string = cache_fn.encode("utf8")
         qdata.cache_fn = strdup(b_string)
 
