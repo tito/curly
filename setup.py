@@ -3,14 +3,8 @@
 import sys
 from os import environ, getenv
 from os.path import join, isdir
-try:
-    from setuptools import setup, Extension
-    from setuptools.command.test import test as TestCommand
-    with_test = True
-except ImportError:
-    from distutils.core import setup
-    from distutils.extension import Extension
-    with_test = False
+from distutils.core import setup
+from distutils.extension import Extension
 
 
 def pkgconfig(*packages, **kw):
@@ -105,15 +99,11 @@ with_coverage = False
 if platform in ('ios', 'android'):
     print('Cython check avoided.')
     with_cython = False
-    try:
-        from setuptools.command.build_ext import build_ext
-    except ImportError:
-        from distutils.command.build_ext import build_ext
+    from distutils.command.build_ext import build_ext
     FILES = ["curly/_curly.c"]
 else:
     try:
         from Cython.Distutils import build_ext
-        from Cython.Build import cythonize
         with_cython = True
         with_coverage = environ.get("WITH_COVERAGE")
     except ImportError:
@@ -139,7 +129,12 @@ if platform == "android":
     LIBRARIES = ["SDL2", "curl", "SDL2_image"]
     LIBRARY_DIRS = ["libs/" + getenv("ARCH")]
 elif platform == "ios":
-    raise Exception("TODO")
+    sysroot = environ.get("IOSSDKROOT", environ.get("SDKROOT"))
+    if not sysroot:
+        raise Exception("IOSSDKROOT is not set")
+    INCLUDE_DIRS = [sysroot]
+    LIBRARIES = []
+    LIBRARY_DIRS = []
 else:
     flags = pkgconfig("sdl2", "SDL2_image", "libcurl")
     INCLUDE_DIRS.extend(flags["include_dirs"])
@@ -161,21 +156,6 @@ if with_cython:
         extensions, compiler_directives=cython_directives)
 
 cmdclass = {'build_ext': build_ext}
-if with_test:
-
-    class PyTest(TestCommand):
-        description = "Run test suite with pytest"
-
-        def finalize_options(self):
-            TestCommand.finalize_options(self)
-            self.test_args = []
-            self.test_suite = True
-
-        def run_tests(self):
-            import pytest
-            sys.exit(pytest.main(self.test_args))
-
-    cmdclass["test"] = PyTest
 
 # create the extension
 setup(
