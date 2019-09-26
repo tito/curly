@@ -152,6 +152,7 @@ extensions = [
     )
 ]
 if with_cython:
+    from Cython.Build import cythonize
     extensions = cythonize(
         extensions, compiler_directives=cython_directives)
 
