@@ -15,6 +15,7 @@ ctypedef struct dl_queue_data:
 
     # image loading if wanted
     int preload_image
+    int no_image_cache
     SDL_Surface *image
     char *image_error
 

@@ -312,6 +312,7 @@ cdef class CurlyResult(object):
         if self._data != NULL:
             dl_queue_node_free(&self._data)
             self._data = NULL
+        self._image = None
 
     @property
     def image(self):
@@ -333,7 +334,7 @@ cdef class CurlyResult(object):
             return
         image = load_from_surface(self._data.image)
         loader = ImageLoaderMemory(self._data.url.decode("utf8"), image)
-        self._image = CoreImage(loader)
+        self._image = CoreImage(loader, nocache=self._data.no_image_cache)
         return self._image
 
 
@@ -463,7 +464,7 @@ cdef class CurlyResult(object):
 def request(url, callback, headers=None,
             method="GET", params=None, data=None, json=None,
             auth=None, cache_fn=None, preload_image=False,
-            priority=False):
+            priority=False, no_image_cache=False):
     """Execute an HTTP Request asynchronously.
     The result will be dispatched only when :func:`process` is called
 
@@ -506,6 +507,8 @@ def request(url, callback, headers=None,
             If True, the URL will be fetch before the other, aka, it will be
             the next to be deque.
             Defaults to False.
+        `no_image_cache`: bool
+            If True, the image won't be cached (nocache=True in CoreImage)
     """
     cdef:
         dl_queue_data *qdata
@@ -518,6 +521,7 @@ def request(url, callback, headers=None,
     # allocate qdata
     qdata = <dl_queue_data *>calloc(1, sizeof(dl_queue_data))
     qdata.preload_image = int(preload_image)
+    qdata.no_image_cache = int(no_image_cache)
 
     # url + params
     if params:
