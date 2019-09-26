@@ -311,6 +311,7 @@ cdef class CurlyResult(object):
     def __dealloc__(self):
         if self._data != NULL:
             dl_queue_node_free(&self._data)
+            self._data = NULL
 
     @property
     def image(self):

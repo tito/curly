@@ -144,4 +144,6 @@ cdef void dl_queue_node_free(dl_queue_data **data):
         free(data[0].auth_userpwd)
     if data[0].postdata != NULL:
         free(data[0].postdata)
+    if data[0].image != NULL:
+        SDL_FreeSurface(data[0].image)
     free(data[0])
