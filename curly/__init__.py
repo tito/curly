@@ -6,7 +6,7 @@ Asynchronous downloader using libcurl
 See README.md for more information.
 """
 
-__version__ = "1.0.0.dev0"
+__version__ = "1.0.0"
 from ._curly import (
     request, download_image, process, install, uninstall, stop,
     get_info, configure, CurlyResult, CurlyError, CurlyHTTPError)
