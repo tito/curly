@@ -139,6 +139,7 @@ else:
     flags = pkgconfig("sdl2", "SDL2_image", "libcurl")
     INCLUDE_DIRS.extend(flags["include_dirs"])
     LIBRARIES.extend(flags["libraries"])
+    LIBRARY_DIRS.extend(flags["library_dirs"])
 
 # create the extensions
 extensions = [
@@ -152,6 +153,7 @@ extensions = [
     )
 ]
 if with_cython:
+    from Cython.Build import cythonize
     extensions = cythonize(
         extensions, compiler_directives=cython_directives)
 
