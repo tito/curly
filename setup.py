@@ -3,9 +3,10 @@
 import sys
 from os import environ, getenv
 from os.path import join, isdir
-from distutils.core import setup
-from distutils.extension import Extension
-
+try:
+    from setuptools import setup, Extension
+except ImportError:
+    from distutils.core import setup, Extension
 
 def pkgconfig(*packages, **kw):
     flag_map = {'-I': 'include_dirs', '-L': 'library_dirs', '-l': 'libraries'}
@@ -61,7 +62,7 @@ EXTRA_LINK_ARGS = []
 INCLUDE_DIRS = []
 INSTALL_REQUIRES = []
 SETUP_KWARGS = {
-    "name": "curly",
+    "name": "pycurly",
     "version": VERSION,
     "packages": ["curly"],
     "py_modules": ["setup"],
