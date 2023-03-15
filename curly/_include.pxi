@@ -20,6 +20,7 @@ cdef extern from "curl/curl.h" nogil:
         CURLOPT_USERPWD
         CURLOPT_POSTFIELDSIZE
         CURLOPT_SSL_VERIFYPEER
+        CURLOPT_USERAGENT
         CURLAUTH_ANY
 
     enum CURLversion:

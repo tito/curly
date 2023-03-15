@@ -136,6 +136,10 @@ elif platform == "ios":
     INCLUDE_DIRS = [sysroot]
     LIBRARIES = []
     LIBRARY_DIRS = []
+elif platform == "win32":
+    INCLUDE_DIRS.append(join(getenv("CONDA_PREFIX"), "Lib", "include"))
+    LIBRARY_DIRS.append(join(getenv("CONDA_PREFIX"), "Lib", "lib"))
+    LIBRARIES = ["SDL2", "curl", "SDL2_image"]
 else:
     flags = pkgconfig("sdl2", "SDL2_image", "libcurl")
     INCLUDE_DIRS.extend(flags["include_dirs"])

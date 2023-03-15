@@ -41,6 +41,7 @@ cdef SDL_atomic_t dl_ready_to_process
 cdef int config_num_threads = 4
 # very bad, will activate by default once we can check cacert.pem on android
 cdef int config_req_verify_peer = 0
+cdef char *config_useragent = NULL
 
 
 cdef size_t _curl_write_data(void *ptr, size_t size, size_t nmemb, dl_queue_data *data) nogil:
@@ -85,7 +86,6 @@ cdef int dl_run_job(void *arg) nogil:
         int require_download
         FILE *fp
 
-
     curl = curl_easy_init()
     if not curl:
         return -1
@@ -114,6 +114,8 @@ cdef int dl_run_job(void *arg) nogil:
                 curl_easy_setopt(curl, CURLOPT_HTTPHEADER, data.headers)
             else:
                 curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL)
+            if config_useragent != NULL:
+                curl_easy_setopt(curl, CURLOPT_USERAGENT, config_useragent)
             if data.auth_userpwd != NULL:
                 curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_ANY)
                 curl_easy_setopt(curl, CURLOPT_USERPWD, data.auth_userpwd)
@@ -664,7 +666,7 @@ def stop():
     SDL_DestroySemaphore(dl_sem)
 
 
-def configure(num_threads=4, req_verify_peer=0):
+def configure(num_threads=4, req_verify_peer=0, useragent=None):
     """Configure the library before any invocation
     Any call after the using `request`, `download_image` or `get_info`
     won't use the information and raise an exception.
@@ -684,3 +686,9 @@ def configure(num_threads=4, req_verify_peer=0):
     global config_num_threads, config_req_verify_peer
     config_num_threads = num_threads
     config_req_verify_peer = 1 if req_verify_peer else 0
+
+    cdef bytes b_string
+    if useragent:
+        b_string = useragent.encode("utf8")
+        config_useragent = strdup(b_string)
+
