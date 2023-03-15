@@ -144,6 +144,7 @@ else:
     flags = pkgconfig("sdl2", "SDL2_image", "libcurl")
     INCLUDE_DIRS.extend(flags["include_dirs"])
     LIBRARIES.extend(flags["libraries"])
+    LIBRARY_DIRS.extend(flags["library_dirs"])
 
 # create the extensions
 extensions = [
