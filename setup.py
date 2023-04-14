@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import sys
 from os import environ, getenv
 from os.path import join, isdir
@@ -8,8 +6,11 @@ try:
 except ImportError:
     from distutils.core import setup, Extension
 
+
 def pkgconfig(*packages, **kw):
     flag_map = {'-I': 'include_dirs', '-L': 'library_dirs', '-l': 'libraries'}
+    for name in flag_map.values():
+        kw.setdefault(name, [])
     lenviron = None
     pconfig = join(sys.prefix, 'libs', 'pkgconfig')
 
@@ -24,18 +25,21 @@ def pkgconfig(*packages, **kw):
         flag = flag_map.get(ext)
         if not flag:
             continue
-        kw.setdefault(flag, []).append(token[2:].decode('utf-8'))
+        kw[flag].append(token[2:].decode('utf-8'))
     return kw
 
 
 def getoutput(cmd, env=None):
     import subprocess
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, env=env)
+    p = subprocess.Popen(cmd,
+                         shell=True,
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE,
+                         env=env)
     p.wait()
     if p.returncode:  # if not returncode == 0
-        print('WARNING: A problem occurred while running {0} (code {1})\n'
-              .format(cmd, p.returncode))
+        print('WARNING: A problem occurred while running {0} (code {1})\n'.
+              format(cmd, p.returncode))
         stderr_content = p.stderr.read()
         if stderr_content:
             print('{0}\n'.format(stderr_content))
@@ -47,7 +51,6 @@ def getoutput(cmd, env=None):
 with open(join("curly", "__init__.py")) as fd:
     versionline = [x for x in fd.readlines() if x.startswith("__version__")]
     VERSION = versionline[0].split('"')[-2]
-
 
 FILES = [
     'curly/_curly.pyx',
@@ -69,11 +72,9 @@ SETUP_KWARGS = {
     "ext_package": "curly",
     "package_data": {},
     "classifiers": [
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
+        "Development Status :: 4 - Beta", "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
-        "Natural Language :: English",
-        "Operating System :: MacOS",
+        "Natural Language :: English", "Operating System :: MacOS",
         "Operating System :: Microsoft :: Windows",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 2.7",
@@ -84,7 +85,6 @@ SETUP_KWARGS = {
         "Topic :: Software Development :: Libraries :: Application Frameworks"
     ]
 }
-
 
 # check platform
 platform = sys.platform
@@ -118,10 +118,8 @@ if with_coverage:
     cython_directives["embedsignature"] = True
     cython_directives["profile"] = True
     cython_directives["linetrace"] = True
-    define_macros = [
-        ("CYTHON_PROFILE", 1),
-        ("CYTHON_TRACE", 1),
-        ("CYTHON_TRACE_NOGIL", 1)]
+    define_macros = [("CYTHON_PROFILE", 1), ("CYTHON_TRACE", 1),
+                     ("CYTHON_TRACE_NOGIL", 1)]
 
 # find libraries
 if platform == "android":
@@ -148,26 +146,22 @@ else:
 
 # create the extensions
 extensions = [
-    Extension(
-        "_curly", FILES,
-        libraries=LIBRARIES,
-        library_dirs=LIBRARY_DIRS,
-        include_dirs=INCLUDE_DIRS,
-        extra_link_args=EXTRA_LINK_ARGS,
-        define_macros=define_macros
-    )
+    Extension("_curly",
+              FILES,
+              libraries=LIBRARIES,
+              library_dirs=LIBRARY_DIRS,
+              include_dirs=INCLUDE_DIRS,
+              extra_link_args=EXTRA_LINK_ARGS,
+              define_macros=define_macros)
 ]
 if with_cython:
     from Cython.Build import cythonize
-    extensions = cythonize(
-        extensions, compiler_directives=cython_directives)
+    extensions = cythonize(extensions, compiler_directives=cython_directives)
 
 cmdclass = {'build_ext': build_ext}
 
 # create the extension
-setup(
-    cmdclass=cmdclass,
-    install_requires=INSTALL_REQUIRES,
-    ext_modules=extensions,
-    **SETUP_KWARGS
-)
+setup(cmdclass=cmdclass,
+      install_requires=INSTALL_REQUIRES,
+      ext_modules=extensions,
+      **SETUP_KWARGS)
