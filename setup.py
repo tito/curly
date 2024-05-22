@@ -127,6 +127,10 @@ if platform == "android":
     INCLUDE_DIRS = getenv("INCLUDE_DIRS").split(":")
     LIBRARIES = ["SDL2", "curl", "SDL2_image"]
     LIBRARY_DIRS = ["libs/" + getenv("ARCH")]
+    # SDL2_image fix include directory not appearing
+    for entry in INCLUDE_DIRS[:]:
+        if "SDL2_image" in entry:
+            INCLUDE_DIRS.append(entry + "/include")
 elif platform == "ios":
     sysroot = environ.get("IOSSDKROOT", environ.get("SDKROOT"))
     if not sysroot:
