@@ -54,8 +54,6 @@ with open(join("curly", "__init__.py")) as fd:
 
 FILES = [
     'curly/_curly.pyx',
-    'curly/_include.pxi',
-    'curly/_queue.pxi',
 ]
 
 LIBRARIES = []

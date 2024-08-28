@@ -78,7 +78,7 @@ cdef size_t _curl_write_header(void *ptr, size_t size, size_t nmemb, dl_queue_da
     return size * nmemb
 
 
-cdef int dl_run_job(void *arg) nogil:
+cdef int dl_run_job(void *arg) nogil noexcept:
     cdef:
         dl_queue_data *data
         CURL *curl
